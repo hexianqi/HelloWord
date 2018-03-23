@@ -1,0 +1,11 @@
+1.新建项目。
+    在https://github.com/上新建项目HelloWord。
+
+2.下载项目。
+    ·   在网页上选择CLone->Open in Desktop。
+    ·   电脑上打开GitHub Desktop，点击File->CLone a repository，选择并CLone一个repositor。
+
+3.编辑项目。
+    3.1 点击Repository->Open In Visual Studio Code。
+    3.2 在编辑器里面进行修改。
+    3.3 修改完以后点击暂存更改，然后提交（注意：一定要写提交信息），再推送。
