@@ -1,0 +1,785 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using IceBox;
+using Ice;
+using System.Runtime.InteropServices;
+using System.Reflection;
+
+namespace Ebang.IceBox
+{
+    public class Server
+    {
+        // Methods
+        public static int Main(string[] args)
+        {
+            InitializationData initializationData = new InitializationData();
+            initializationData.properties = Util.createProperties();
+            initializationData.properties.setProperty("Ice.Admin.DelayCreation", "1");
+            App app = new App();
+            return app.main(args, initializationData);
+        }
+    }
+
+    public class App : Application
+    {
+        // Methods
+        public override int run(string[] args)
+        {
+            List<string> list = new List<string>(args);
+            foreach (KeyValuePair<string, string> pair in Application.communicator().getProperties().getPropertiesForPrefix("IceBox.Service."))
+            {
+                string str = pair.Key.Substring("IceBox.Service.".Length);
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (list[i].StartsWith("--" + str, StringComparison.CurrentCulture))
+                    {
+                        list.RemoveAt(i);
+                        i--;
+                    }
+                }
+            }
+            foreach (string str2 in list)
+            {
+                if (str2.Equals("-h") || str2.Equals("--help"))
+                {
+                    usage();
+                    return 0;
+                }
+                Console.Error.WriteLine("Server: unknown option `" + str2 + "'");
+                usage();
+                return 1;
+            }
+            ServiceManagerI sm = new ServiceManagerI(Application.communicator(), args);
+            return sm.run();
+        }
+
+        static void usage()
+        {
+            Console.Error.WriteLine("Usage: iceboxnet [options] --Ice.Config=<file>\n");
+            Console.Error.WriteLine("Options:\n-h, --help           Show this message.\n");
+        }
+    }
+
+    class ServiceManagerI : ServiceManagerDisp_
+    {
+        // Fields
+        string[] _argv;
+        Communicator _communicator;
+        Communicator _sharedCommunicator;
+        Logger _logger;
+        readonly IceUtilInternal.Monitor _monitor = new IceUtilInternal.Monitor();
+        Dictionary<ServiceObserverPrx, bool> _observers = new Dictionary<ServiceObserverPrx, bool>();
+        bool _pendingStatusChanges;
+        List<ServiceInfo> _services = new List<ServiceInfo>();        
+        int _traceServiceObserver;
+        // Methods
+        public ServiceManagerI(Communicator communicator, string[] args)
+        {
+            this._communicator = communicator;
+            this._logger = this._communicator.getLogger();
+            this._argv = args;
+            this._traceServiceObserver = this._communicator.getProperties().getPropertyAsInt("IceBox.Trace.ServiceObserver");
+        }
+
+        public override Dictionary<string, string> getSliceChecksums(Current current)
+        {
+            return SliceChecksums.checksums;
+        }
+
+        public override void addObserver(ServiceObserverPrx observer, Current current)
+        {
+            List<string> list = new List<string>();
+            this._monitor.Lock();
+            try
+            {
+                if (observer != null)
+                {
+                    try
+                    {
+                        this._observers.Add(observer, true);
+                    }
+                    catch (ArgumentException)
+                    {
+                        return;
+                    }
+                    if (this._traceServiceObserver >= 1)
+                    {
+                        this._logger.trace("IceBox.ServiceObserver", "Added service observer " + this._communicator.proxyToString(observer));
+                    }
+                    foreach (ServiceInfo info in this._services)
+                    {
+                        if (info.status == ServiceStatus.Started)
+                            list.Add(info.name);
+                    }
+                }
+            }
+            finally
+            {
+                this._monitor.Unlock();
+            }
+            if (list.Count > 0)
+                observer.begin_servicesStarted(list.ToArray(), new Ice.AsyncCallback(this.observerCompleted), null);
+        }
+
+        public override void startService(string name, Current current)
+        {
+            ServiceInfo info = new ServiceInfo();
+            this._monitor.Lock();
+            try
+            {
+                int num = 0;
+                while (num < this._services.Count)
+                {
+                    info = this._services[num];
+                    if (info.name.Equals(name))
+                    {
+                        if (this._services[num].status != ServiceStatus.Stopped)
+                            throw new AlreadyStartedException();
+                        info.status = ServiceStatus.Starting;
+                        this._services[num] = info;
+                        break;
+                    }
+                    num++;
+                }
+                if (num == this._services.Count)
+                    throw new NoSuchServiceException();
+                this._pendingStatusChanges = true;
+            }
+            finally
+            {
+                this._monitor.Unlock();
+            }
+            bool flag = false;
+            try
+            {
+                info.service.start(info.name, (info.communicator == null) ? this._sharedCommunicator : info.communicator, info.args);
+                flag = true;
+            }
+            catch (System.Exception exception)
+            {
+                this._logger.warning("ServiceManager: exception while starting service " + info.name + ":\n" + exception.ToString());
+            }
+            this._monitor.Lock();
+            try
+            {
+                for (int i = 0; i < this._services.Count; i++)
+                {
+                    info = this._services[i];
+                    if (info.name.Equals(name))
+                    {
+                        if (flag)
+                        {
+                            info.status = ServiceStatus.Started;
+                            List<string> services = new List<string> { name };
+                            this.servicesStarted(services, this._observers.Keys);
+                        }
+                        else
+                            info.status = ServiceStatus.Stopped;
+                        this._services[i] = info;
+                        break;
+                    }
+                }
+                this._pendingStatusChanges = false;
+                this._monitor.NotifyAll();
+            }
+            finally
+            {
+                this._monitor.Unlock();
+            }
+        }
+
+        public override void stopService(string name, Current current)
+        {
+            ServiceInfo info = new ServiceInfo();
+            this._monitor.Lock();
+            try
+            {
+                int num = 0;
+                while (num < this._services.Count)
+                {
+                    info = this._services[num];
+                    if (info.name.Equals(name))
+                    {
+                        if (info.status != ServiceStatus.Started)
+                            throw new AlreadyStoppedException();
+                        info.status = ServiceStatus.Stopping;
+                        this._services[num] = info;
+                        break;
+                    }
+                    num++;
+                }
+                if (num == this._services.Count)
+                {
+                    throw new NoSuchServiceException();
+                }
+                this._pendingStatusChanges = true;
+            }
+            finally
+            {
+                this._monitor.Unlock();
+            }
+            bool flag = false;
+            try
+            {
+                info.service.stop();
+                flag = true;
+            }
+            catch (System.Exception exception)
+            {
+                this._logger.warning("ServiceManager: exception while stopping service " + info.name + "\n" + exception.ToString());
+            }
+            this._monitor.Lock();
+            try
+            {
+                for (int i = 0; i < this._services.Count; i++)
+                {
+                    info = this._services[i];
+                    if (info.name.Equals(name))
+                    {
+                        if (flag)
+                        {
+                            info.status = ServiceStatus.Stopped;
+                            List<string> services = new List<string> { name };
+                            this.servicesStopped(services, this._observers.Keys);
+                        }
+                        else
+                        {
+                            info.status = ServiceStatus.Started;
+                        }
+                        this._services[i] = info;
+                        break;
+                    }
+                }
+                this._pendingStatusChanges = false;
+                this._monitor.NotifyAll();
+            }
+            finally
+            {
+                this._monitor.Unlock();
+            }
+        }
+
+        public override void shutdown(Current current)
+        {
+            this._communicator.shutdown();
+        }
+
+        public int run()
+        {
+            try
+            {
+                Properties properties = this._communicator.getProperties();
+                ObjectAdapter adapter = null;
+                if (properties.getProperty("IceBox.ServiceManager.Endpoints").Length != 0)
+                {
+                    adapter = this._communicator.createObjectAdapter("IceBox.ServiceManager");
+                    Identity id = new Identity
+                    {
+                        category = properties.getPropertyWithDefault("IceBox.InstanceName", "IceBox"),
+                        name = "ServiceManager"
+                    };
+                    adapter.add(this, id);
+                }
+                string prefix = "IceBox.Service.";
+                Dictionary<string, string> dictionary = properties.getPropertiesForPrefix(prefix);
+                string[] strArray = properties.getPropertyAsList("IceBox.LoadOrder");
+                List<StartServiceInfo> list = new List<StartServiceInfo>();
+                for (int i = 0; i < strArray.Length; i++)
+                {
+                    if (strArray[i].Length == 0)
+                        continue;
+                    string key = prefix + strArray[i];
+                    string str3 = dictionary[key];
+                    if (str3 == null)
+                        throw new FailureException("ServiceManager: no service definition for `" + strArray[i] + "'");
+                    list.Add(new StartServiceInfo(strArray[i], str3, this._argv));
+                    dictionary.Remove(key);
+                }
+                foreach (KeyValuePair<string, string> pair in dictionary)
+                    list.Add(new StartServiceInfo(pair.Key.Substring(prefix.Length), pair.Value, this._argv));
+                if (properties.getPropertiesForPrefix("IceBox.UseSharedCommunicator.").Count > 0)
+                {
+                    InitializationData initData = new InitializationData
+                    {
+                        properties = this.createServiceProperties("SharedCommunicator")
+                    };
+                    foreach (StartServiceInfo info in list)
+                    {
+                        if (properties.getPropertyAsInt("IceBox.UseSharedCommunicator." + info.name) > 0)
+                        {
+                            Properties properties2 = Util.createProperties(ref info.args, initData.properties);
+                            foreach (string str6 in initData.properties.getPropertiesForPrefix("").Keys)
+                            {
+                                if (properties2.getProperty(str6).Length == 0)
+                                    initData.properties.setProperty(str6, "");
+                            }
+                            foreach (KeyValuePair<string, string> pair2 in properties2.getPropertiesForPrefix(""))
+                                initData.properties.setProperty(pair2.Key, pair2.Value);
+                            info.args = initData.properties.parseCommandLineOptions(info.name, info.args);
+                        }
+                    }
+                    IceInternal.MetricsAdminI metrics = null;
+                    if (this._communicator.getObserver() is IceInternal.CommunicatorObserverI)
+                    {
+                        metrics = new IceInternal.MetricsAdminI(initData.properties, Util.getProcessLogger());
+                        initData.observer = new IceInternal.CommunicatorObserverI(metrics);
+                    }
+                    this._sharedCommunicator = Util.initialize(initData);
+                    if (metrics != null)
+                        metrics.setProperties(this._sharedCommunicator.getProperties());
+                }
+                foreach (StartServiceInfo info2 in list)
+                    this.startService(info2.name, info2.entryPoint, info2.args);
+                string str7 = properties.getProperty("IceBox.PrintServicesReady");
+                if (str7.Length > 0)
+                    Console.Out.WriteLine(str7 + " ready");
+                Application.shutdownOnInterrupt();
+                try
+                {
+                    this._communicator.addAdminFacet(this, "IceBox.ServiceManager");
+                    this._communicator.getAdmin();
+                }
+                catch (ObjectAdapterDeactivatedException)
+                {
+                }
+                if (adapter != null)
+                {
+                    try
+                    {
+                        adapter.activate();
+                    }
+                    catch (ObjectAdapterDeactivatedException)
+                    {
+                    }
+                }
+                this._communicator.waitForShutdown();
+            }
+            catch (FailureException exception2)
+            {
+                this._logger.error(exception2.ToString());
+                return 1;
+            }
+            catch (System.Exception exception3)
+            {
+                this._logger.error("ServiceManager: caught exception:\n" + exception3.ToString());
+                return 1;
+            }
+            finally
+            {
+                this.stopAll();
+            }
+            return 0;
+        }
+
+        Properties createServiceProperties(string service)
+        {
+            Properties properties;
+            Properties properties2 = this._communicator.getProperties();
+            if (properties2.getPropertyAsInt("IceBox.InheritProperties") > 0)
+            {
+                properties = properties2.ice_clone_();
+                properties.setProperty("Ice.Admin.Endpoints", "");
+            }
+            else
+            {
+                properties = Util.createProperties();
+            }
+            string str = properties2.getProperty("Ice.ProgramName");
+            string name = str.Length == 0 ? service : str + "-" + service;
+            properties.setProperty("Ice.ProgramName", name);
+            return properties;
+        }
+
+        void destroyServiceCommunicator(string service, Communicator communicator)
+        {
+            if (communicator == null)
+                return;
+            try
+            {
+                communicator.shutdown();
+                communicator.waitForShutdown();
+            }
+            catch (CommunicatorDestroyedException)
+            {
+            }
+            catch (System.Exception exception)
+            {
+                this._logger.warning("ServiceManager: exception while shutting down communicator for service " + service + "\n" + exception.ToString());
+            }
+            try
+            {
+                communicator.destroy();
+            }
+            catch (System.Exception exception2)
+            {
+                this._logger.warning("ServiceManager: exception while destroying communicator for service " + service + "\n" + exception2.ToString());
+            }
+        }        
+
+        void observerCompleted(AsyncResult result)
+        {
+            try
+            {
+                result.throwLocalException();
+            }
+            catch (LocalException exception)
+            {
+                this._monitor.Lock();
+                try
+                {
+                    ServiceObserverPrx key = ServiceObserverPrxHelper.uncheckedCast(result.getProxy());
+                    if (this._observers.Remove(key))
+                        this.observerRemoved(key, exception);
+                }
+                finally
+                {
+                    this._monitor.Unlock();
+                }
+            }
+        }
+
+        void observerRemoved(ServiceObserverPrx observer, System.Exception ex)
+        {
+            if ((this._traceServiceObserver >= 1) && !(ex is CommunicatorDestroyedException))
+                this._logger.trace("IceBox.ServiceObserver", "Removed service observer " + this._communicator.proxyToString(observer) + "\nafter catching " + ex.ToString());
+        }        
+
+        void servicesStarted(List<string> services, Dictionary<ServiceObserverPrx, bool>.KeyCollection observers)
+        {
+            if (services.Count == 0)
+                return;
+
+            string[] strArray = services.ToArray();
+            foreach (ServiceObserverPrx prx in observers)
+                prx.begin_servicesStarted(strArray, new Ice.AsyncCallback(this.observerCompleted), null);
+        }
+
+        void servicesStopped(List<string> services, Dictionary<ServiceObserverPrx, bool>.KeyCollection observers)
+        {
+            if (services.Count == 0)
+                return;
+            
+            string[] strArray = services.ToArray();
+            foreach (ServiceObserverPrx prx in observers)
+                prx.begin_servicesStopped(strArray, new Ice.AsyncCallback(this.observerCompleted), null);
+        }
+    
+        void startService(string service, string entryPoint, string[] args)
+        {
+            this._monitor.Lock();
+            try
+            {
+                Communicator communicator;
+                string str = "ServiceManager: unable to load service '" + entryPoint + "': ";
+                int index = entryPoint.IndexOf(':');
+                if ((((index != -1) && (IceInternal.AssemblyUtil.platform_ == IceInternal.AssemblyUtil.Platform.Windows)) && ((entryPoint.Length > 3) && (index == 1))) && (("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".IndexOf(entryPoint[0]) != -1) && ((entryPoint[2] == '\\') || (entryPoint[2] == '/'))))
+                {
+                    index = entryPoint.IndexOf(':', 3);
+                }
+                if (index == -1)
+                    throw new FailureException(str + "invalid entry point format");
+                Assembly assembly = null;
+                string assemblyString = entryPoint.Substring(0, index);
+                string name = entryPoint.Substring(index + 1);
+                try
+                {
+                    try
+                    {
+                        assembly = Assembly.Load(assemblyString);
+                    }
+                    catch (System.IO.IOException exception2)
+                    {
+                        try
+                        {
+                            assembly = Assembly.LoadFrom(assemblyString);
+                        }
+                        catch (System.IO.IOException)
+                        {
+                            throw exception2;
+                        }
+                    }
+                }
+                catch (System.Exception exception3)
+                {
+                    throw new FailureException(str + "unable to load assembly: " + assemblyString, exception3);
+                }
+                Type t = null;
+                try
+                {
+                    t = assembly.GetType(name, true);
+                }
+                catch (System.Exception exception5)
+                {
+                    throw new FailureException(str + "GetType failed for '" + name + "'", exception5);
+                }
+                ServiceInfo item = new ServiceInfo
+                {
+                    name = service,
+                    status = ServiceStatus.Stopped,
+                    args = args
+                };
+                IceInternal.MetricsAdminI metrics = null;
+                if (this._communicator.getProperties().getPropertyAsInt("IceBox.UseSharedCommunicator." + service) > 0)
+                {
+                    System.Diagnostics.Debug.Assert(this._sharedCommunicator != null);
+                    communicator = this._sharedCommunicator;
+                    if (communicator.getObserver() is IceInternal.CommunicatorObserverI)
+                    {
+                        metrics = ((IceInternal.CommunicatorObserverI)communicator.getObserver()).getMetricsAdmin();
+                    }
+                }
+                else
+                {
+                    InitializationData initData = new InitializationData
+                    {
+                        properties = this.createServiceProperties(service)
+                    };
+                    if (item.args.Length > 0)
+                    {
+                        initData.properties = Util.createProperties(ref item.args, initData.properties);
+                        item.args = initData.properties.parseCommandLineOptions(service, item.args);
+                    }
+                    if ((initData.properties.getProperty("Ice.LogFile").Length == 0) && ((initData.properties.getPropertyAsInt("Ice.UseSyslog") == 0) || (IceInternal.AssemblyUtil.platform_ == IceInternal.AssemblyUtil.Platform.Windows)))
+                    {
+                        initData.logger = this._logger.cloneWithPrefix(initData.properties.getProperty("Ice.ProgramName"));
+                    }
+                    if (this._communicator.getObserver() is IceInternal.CommunicatorObserverI)
+                    {
+                        metrics = new IceInternal.MetricsAdminI(initData.properties, initData.logger);
+                        initData.observer = new IceInternal.CommunicatorObserverI(metrics);
+                    }
+                    item.communicator = Util.initialize(ref item.args, initData);
+                    communicator = item.communicator;
+                    if (metrics != null)
+                    {
+                        metrics.setProperties(communicator.getProperties());
+                    }
+                }
+                try
+                {
+                    string str4 = "IceBox.Service." + item.name + ".Properties";
+                    IceInternal.PropertiesAdminI servant = new IceInternal.PropertiesAdminI(str4, communicator.getProperties(), communicator.getLogger());
+                    this._communicator.addAdminFacet(servant, str4);
+                    if (metrics != null)
+                    {
+                        this._communicator.addAdminFacet(metrics, "IceBox.Service." + item.name + ".Metrics");
+                        servant.addUpdateCallback(metrics);
+                    }
+                    try
+                    {
+                        Type[] types = new Type[] { typeof(Communicator) };
+                        ConstructorInfo constructor = t.GetConstructor(types);
+                        if (constructor != null)
+                        {
+                            try
+                            {
+                                object[] parameters = new object[] { this._communicator };
+                                item.service = (Service)constructor.Invoke(parameters);
+                                goto Label_0489;
+                            }
+                            catch (MethodAccessException exception7)
+                            {
+                                throw new FailureException(str + "unable to access service constructor " + name + "(Ice.Communicator)", exception7);
+                            }
+                        }
+                        try
+                        {
+                            item.service = (Service)IceInternal.AssemblyUtil.createInstance(t);
+                            if (item.service == null)
+                                throw new FailureException(str + "no default constructor for '" + name + "'");
+                        }
+                        catch (UnauthorizedAccessException exception10)
+                        {
+                            throw new FailureException(str + "unauthorized access to default service constructor for " + name, exception10);
+                        }
+                    }
+                    catch (FailureException)
+                    {
+                        throw;
+                    }
+                    catch (InvalidCastException exception12)
+                    {
+                        throw new FailureException(str + "service does not implement IceBox.Service", exception12);
+                    }
+                    catch (TargetInvocationException exception14)
+                    {
+                        if (exception14.InnerException is FailureException)
+                        {
+                            throw exception14.InnerException;
+                        }
+                        throw new FailureException(str + "exception in service constructor for " + name, exception14.InnerException);
+                    }
+                    catch (System.Exception exception16)
+                    {
+                        throw new FailureException(reason = str + "exception in service constructor " + name, exception16);
+                    }
+                Label_0489:
+                    try
+                    {
+                        item.service.start(service, communicator, item.args);
+                    }
+                    catch (FailureException)
+                    {
+                        throw;
+                    }
+                    catch (System.Exception exception18)
+                    {
+                        throw new FailureException("exception while starting service " + service, exception18);
+                    }
+                    item.status = ServiceStatus.Started;
+                    this._services.Add(item);
+                }
+                catch (ObjectAdapterDeactivatedException)
+                {
+                    if (item.communicator != null)
+                        this.destroyServiceCommunicator(service, item.communicator);
+                }
+                catch (System.Exception exception20)
+                {
+                    try
+                    {
+                        this._communicator.removeAdminFacet("IceBox.Service." + service + ".Properties");
+                    }
+                    catch (LocalException)
+                    {
+                    }
+                    if (item.communicator != null)
+                    {
+                        this.destroyServiceCommunicator(service, item.communicator);
+                    }
+                    throw exception20;
+                }
+            }
+            finally
+            {
+                this._monitor.Unlock();
+            }
+        }
+
+        void stopAll()
+        {
+            this._monitor.Lock();
+            try
+            {
+                while (this._pendingStatusChanges)
+                {
+                    this._monitor.Wait();
+                }
+                this._services.Reverse();
+                List<string> services = new List<string>();
+                foreach (ServiceInfo info in this._services)
+                {
+                    if (info.status == ServiceStatus.Started)
+                    {
+                        try
+                        {
+                            info.service.stop();
+                            services.Add(info.name);
+                        }
+                        catch (System.Exception exception)
+                        {
+                            this._logger.warning("IceBox.ServiceManager: exception while stopping service " + info.name + ":\n" + exception.ToString());
+                        }
+                    }
+                    try
+                    {
+                        this._communicator.removeAdminFacet("IceBox.Service." + info.name + ".Properties");
+                    }
+                    catch (LocalException)
+                    {
+                    }
+                    if (info.communicator != null)
+                    {
+                        this.destroyServiceCommunicator(info.name, info.communicator);
+                    }
+                }
+                if (this._sharedCommunicator != null)
+                {
+                    try
+                    {
+                        this._sharedCommunicator.destroy();
+                    }
+                    catch (System.Exception exception2)
+                    {
+                        this._logger.warning("ServiceManager: exception while destroying shared communicator:\n" + exception2.ToString());
+                    }
+                    this._sharedCommunicator = null;
+                }
+                this._services.Clear();
+                this.servicesStopped(services, this._observers.Keys);
+            }
+            finally
+            {
+                this._monitor.Unlock();
+            }
+        }
+
+        // Nested Types
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ServiceInfo
+        {
+            public string name;
+            public Service service;
+            public Communicator communicator;
+            public ServiceManagerI.ServiceStatus status;
+            public string[] args;
+        }
+
+        private enum ServiceStatus
+        {
+            Stopping,
+            Stopped,
+            Starting,
+            Started
+        }
+
+        private class StartServiceInfo
+        {
+            // Fields
+            public string[] args;
+            public string entryPoint;
+            public string name;
+
+            // Methods
+            public StartServiceInfo(string service, string value, string[] serverArgs)
+            {
+                this.name = service;
+                try
+                {
+                    this.args = IceUtilInternal.Options.split(value);
+                }
+                catch (IceUtilInternal.Options.BadQuote quote)
+                {
+                    FailureException exception = new FailureException
+                    {
+                        reason = "ServiceManager: invalid arguments for service `" + this.name + "':\n" + quote.Message
+                    };
+                    throw exception;
+                }
+                System.Diagnostics.Debug.Assert(this.args.Length > 0);
+                this.entryPoint = this.args[0];
+                string[] destinationArray = new string[this.args.Length - 1];
+                Array.Copy(this.args, 1, destinationArray, 0, this.args.Length - 1);
+                this.args = destinationArray;
+                if (serverArgs.Length > 0)
+                {
+                    System.Collections.ArrayList list = new System.Collections.ArrayList();
+                    for (int i = 0; i < this.args.Length; i++)
+                    {
+                        list.Add(this.args[i]);
+                    }
+                    for (int j = 0; j < serverArgs.Length; j++)
+                    {
+                        if (serverArgs[j].StartsWith("--" + service + ".", StringComparison.Ordinal))
+                        {
+                            list.Add(serverArgs[j]);
+                        }
+                    }
+                    this.args = (string[])list.ToArray(typeof(string));
+                }
+            }
+        }
+    }
+}
