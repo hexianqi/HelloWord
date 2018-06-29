@@ -49,7 +49,7 @@
 8.安装基本开发环境和常用工具
     pacman -S  base-devel  git  mercurial  cvs  wget  p7zip  perl  ruby  python2
 
-9.编译源码
+9.编译源码（qt使用最好用32位的，64位不一定能编译过）
      ./configure [--prefix=/test // 加编译目录] [--enable-shared // 启用动态库] 
-     make
+     make 或 mingw32-make
      make install

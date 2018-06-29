@@ -1,0 +1,18 @@
+相关说明：
+    1.MinGW32和MinGW-w64区别：
+        MinGW32：   先开发，只能编译32位程序；
+        MinGW-w64： 从MinGW32发展而来，支持编译64和32位位程序，同时可以进行交叉编译。
+
+    2.MinGW-w64类型:
+        x86_64: 支持在x64和x86上运行，生成64位库只要用默认的参数编译即可,而生成32位库则要用-m32参数编译。
+        i686:   支持在x86上运行，默认生成32位程序。
+
+    3.i386/i686/x86_64区别
+        i386    适用于intel和AMD所有32位的cpu，以及采用X86架构的32的cpu。
+        X86_64  适用于intel和AMD采用X86架构的64位cpu，兼容32位。
+        I686    只是i386的一个子集,支持的cpu从Pentium 2 (686)开始,之前的型号不支持。
+
+    4.于seh、sjlj和dwrf
+        SJLJ (setjmp/longjmp):          available for 32 bit and 64 bit
+        DWARF (DW2, dwarf-2):           available for 32 bit only
+        SEH (zero overhead exception):  will be available for 64-bit GCC 4.8.
