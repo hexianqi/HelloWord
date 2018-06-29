@@ -1,3 +1,3 @@
-# HelloWord
+# HelloWord 一些工具的使用笔记
 
-一些使用笔记
+MSYS2、boost
