@@ -51,5 +51,5 @@
 
 9.编译源码（qt使用最好用32位的，64位不一定能编译过）
      ./configure [--prefix=/test // 加编译目录] [--enable-shared // 启用动态库] 
-     make 或 mingw32-make
+     make 或 mingw32-make // 最好把mingw32-make 改成 make
      make install
