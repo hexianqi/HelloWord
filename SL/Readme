@@ -1,0 +1,67 @@
+要使用的动态库名称是ProtocolSl.dll。
+    
+其中包含的API：
+    bool OpenProtocol();    // 打开协议，返回完成情况。返回假时，下面的函数返回的数据都不是真实数据。
+	bool CloseProtocol();   // 关闭协议，返回完成情况。
+	bool SetIntegralTime(double value); // 设置积分时间，范围1-500ms。
+	bool GetSpectrumSample(int value[], int *size, double *percent);    // 获取采样数据、有效数据长度、采样比例（检查是否满度）。数据大小最好大于2100
+	bool GetSpectrumEnergy(double value[], int *size, double *percent);	// 获取采样能量（波长380-780nm的能量数据，间隔0.1nm）、有效数据长度、采样比例（检查是否满度）。数据大小最好大于4001
+
+C#范例：
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace ProtocolDemo
+{
+    class Program
+    {
+        [DllImport(@"ProtocolSl.dll", EntryPoint = "OpenProtocol", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        static extern bool OpenProtocol();
+        [DllImport(@"ProtocolSl.dll", EntryPoint = "CloseProtocol", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        static extern bool CloseProtocol();
+        [DllImport(@"ProtocolSl.dll", EntryPoint = "SetIntegralTime", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        static extern bool SetIntegralTime(double value);
+        [DllImport(@"ProtocolSl.dll", EntryPoint = "GetSpectrumSample", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        static extern bool GetSpectrumSample(int[] data, ref int size, out double percent);
+        [DllImport(@"ProtocolSl.dll", EntryPoint = "GetSpectrumEnergy", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        static extern bool GetSpectrumEnergy(double[] value, ref int size, out double percent);
+
+        static void Main(string[] args)
+        {
+            TestProtocol();
+            Console.ReadKey();
+        }
+        
+        static void TestProtocol()
+        {
+            int[] sample = new int[2500];
+            double[] energy = new double[4001];
+            double percent1;
+            double percent2;
+            int size1 = sample.Length;
+            int size2 = energy.Length;
+
+            Console.WriteLine("OpenProtocol:" + OpenProtocol());
+            Console.WriteLine("SetIntegralTime:" + SetIntegralTime(100));
+            Console.WriteLine("GetSpectrumSample:" + GetSpectrumSample(sample, ref size1, out percent1));
+            Console.WriteLine("GetSpectrumEnergy:" + GetSpectrumEnergy(energy, ref size2, out percent2));
+            Console.WriteLine("CloseProtocol:" + CloseProtocol());
+            Console.WriteLine("Sample size:" + size1);
+            Console.WriteLine("Sample percent:" + percent1);
+            foreach (var v in sample)
+                Console.Write(" " + v);
+            Console.WriteLine("\nEnergy size:" + size2);
+            Console.WriteLine("Sample percent:" + percent2);
+            foreach (var v in energy)
+                Console.Write(" " + v);
+        }
+    }
+}
