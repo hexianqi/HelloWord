@@ -3,9 +3,12 @@
 其中包含的API：
     bool OpenProtocol();    // 打开协议，返回完成情况。返回假时，下面的函数返回的数据都不是真实数据。
 	bool CloseProtocol();   // 关闭协议，返回完成情况。
-	bool SetIntegralTime(double value); // 设置积分时间，范围1-500ms。
-	bool GetSpectrumSample(int value[], int *size, double *percent);    // 获取采样数据、有效数据长度、采样比例（检查是否满度）。数据大小最好大于2100
-	bool GetSpectrumEnergy(double value[], int *size, double *percent);	// 获取采样能量（波长380-780nm的能量数据，间隔0.1nm）、有效数据长度、采样比例（检查是否满度）。数据大小最好大于4001
+	bool SetIntegralTime(double value);     // 设置积分时间，范围1-500ms，精度0.1。
+    bool SetSmooth(int times, int range);   // 设置平滑次数和范围。
+    double PelsToWave(int value);           // 像元转换成波长
+    double HandleNonlinear(int value);      // 非线性处理
+	bool GetSpectrumSample(int value[], int *size, double *percent, bool fit);  // 获取采样数据(是否做过非线性处理)、有效数据长度、采样比例（检查是否满度）。数据大小最好大于2100
+	bool GetSpectrumEnergy(double value[], int *size, double *percent);	        // 获取采样能量、有效数据长度、采样比例（检查是否满度）。数据大小最好大于2100
 
 C#范例：
 using System;
@@ -21,47 +24,79 @@ namespace ProtocolDemo
         [DllImport(@"ProtocolSl.dll", EntryPoint = "OpenProtocol", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
         static extern bool OpenProtocol();
+
         [DllImport(@"ProtocolSl.dll", EntryPoint = "CloseProtocol", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
         static extern bool CloseProtocol();
+
         [DllImport(@"ProtocolSl.dll", EntryPoint = "SetIntegralTime", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
         static extern bool SetIntegralTime(double value);
+
+        [DllImport(@"ProtocolSl.dll", EntryPoint = "SetSmooth", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        static extern bool SetSmooth(int times, int range);
+
         [DllImport(@"ProtocolSl.dll", EntryPoint = "GetSpectrumSample", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
-        static extern bool GetSpectrumSample(int[] data, ref int size, out double percent);
+        static extern bool GetSpectrumSample(int[] data, ref int size, out double percent, bool fit);
+
         [DllImport(@"ProtocolSl.dll", EntryPoint = "GetSpectrumEnergy", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
         static extern bool GetSpectrumEnergy(double[] value, ref int size, out double percent);
+
+        [DllImport(@"ProtocolSl.dll", EntryPoint = "PelsToWave", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        static extern double PelsToWave(int value);
+    
+        [DllImport(@"ProtocolSl.dll", EntryPoint = "HandleNonlinear", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        static extern double HandleNonlinear(int value);
 
         static void Main(string[] args)
         {
             TestProtocol();
             Console.ReadKey();
         }
-        
+
         static void TestProtocol()
         {
+            int i;
             int[] sample = new int[2500];
             double[] energy = new double[4001];
             double percent1;
             double percent2;
             int size1 = sample.Length;
             int size2 = energy.Length;
-
+            // 打开协议
             Console.WriteLine("OpenProtocol:" + OpenProtocol());
+            // 设置积分时间
             Console.WriteLine("SetIntegralTime:" + SetIntegralTime(100));
-            Console.WriteLine("GetSpectrumSample:" + GetSpectrumSample(sample, ref size1, out percent1));
-            Console.WriteLine("GetSpectrumEnergy:" + GetSpectrumEnergy(energy, ref size2, out percent2));
-            Console.WriteLine("CloseProtocol:" + CloseProtocol());
+            // 设置平滑次数范围
+            Console.WriteLine("SetSmooth:" + SetSmooth(2, 2));
+            // 像元波长对应关系
+            Console.WriteLine("PelsToWave:" + SetSmooth(2, 2));
+            for (i = 0; i < 2048; i++)
+                Console.WriteLine("pels " + i + " = " + PelsToWave(i) + " nm");
+            // 获取光谱采样数据（false：不处理非线性，true：处理非线性）
+            Console.WriteLine("GetSpectrumSample:" + GetSpectrumSample(sample, ref size1, out percent1, false));
             Console.WriteLine("Sample size:" + size1);
             Console.WriteLine("Sample percent:" + percent1);
             foreach (var v in sample)
                 Console.Write(" " + v);
+            // 非线性处理
+            Console.WriteLine("\nHandleNonlinear:" + size1);
+            foreach (var v in sample)
+                Console.Write(" " + HandleNonlinear(v));
+            // 获取光谱能量数据
+            Console.WriteLine("GetSpectrumEnergy:" + GetSpectrumEnergy(energy, ref size2, out percent2));
             Console.WriteLine("\nEnergy size:" + size2);
             Console.WriteLine("Sample percent:" + percent2);
             foreach (var v in energy)
                 Console.Write(" " + v);
+            // 关闭协议
+            Console.WriteLine("CloseProtocol:" + CloseProtocol());            
         }
     }
 }
+
