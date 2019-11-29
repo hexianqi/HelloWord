@@ -1,0 +1,5 @@
+
+--------Spyder汉化------
+1. 下载汉化包：https://github.com/kingmo888/Spyder_Simplified_Chinese；
+2. 在该目录下打开命令窗口，执行：python main.py，如果出现提示：...安装成功，按ENTER退出...表示进展顺利；
+3. 重启spyder后，打开：Tools--Preferences--General--Advanced Settings--language--简体中文，完成汉化。
