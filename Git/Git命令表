@@ -1,7 +1,7 @@
 1、常用的Git命令
-    命令                 简要说明
+    命令                  简要说明
 git add                 添加至暂存区
-git add–interactive     交互式添加
+git add–interactive    交互式添加
 git apply               应用补丁
 git am                  应用邮件格式补丁
 git annotate            等同于 git blame
@@ -34,7 +34,7 @@ git mv                  重命名
 git pull                拉回远程版本库的提交
 git push                推送至远程版本库
 git rebase              分支变基
-git rebase–interactive  交互式分支变基
+git rebase–interactive 交互式分支变基
 git reflog              分支等引用变更记录管理
 git remote              远程版本库管理
 git repo-config*        同义词，等同于 git config
@@ -49,7 +49,7 @@ git status              显示工作区文件状态
 git tag                 里程碑管理
 
 2、对象库操作相关命令
-    命令                 简要说明
+    命令                  简要说明
 git commit-tree         从树对象创建提交
 git hash-object         从标准输入或文件计算哈希值或创建对象
 git ls-files            显示工作区和暂存区文件
@@ -62,7 +62,7 @@ git unpack-file         创建临时文件包含指定blob的内容
 git write-tree          从暂存区创建一个树对象
 
 3、引用操作相关命令
-    命令                 简要说明
+    命令                  简要说明
 git check-ref-format    检查引用名称是否符合规范
 git for-each-ref        引用迭代器，用于shell编程
 git ls-remote           显示远程版本库的引用
@@ -76,7 +76,7 @@ git update-ref          更新引用的指向
 git verify-tag          校验GPG签名的Tag
 
 4、版本库管理相关命令
-    命令                 简要说明
+    命令                  简要说明
 git count-objects       显示松散对象的数量和磁盘占用
 git filter-branch       版本库重构
 git fsck                对象库完整性检查
@@ -96,7 +96,7 @@ git unpack-objects      从打包文件释放文件
 git verify-pack         校验对象库打包文件
 
 5、数据传输相关命令
-    命令                 简要说明
+    命令                  简要说明
 git fetch-pack          执行 git fetch 或 git pull 命令时在本地执行此命令，用于从其他版本库获取缺失的对象
 git receive-pack        执行 git push 命令时在远程执行的命令，用于接受推送的数据
 git send-pack           执行 git push 命令时在本地执行的命令，用于向其他版本库推送数据
@@ -104,7 +104,7 @@ git upload-archive      执行 git archive –remote 命令基于远程版本库
 git upload-pack         执行 git fetch 或 git pull 命令时在远程执行此命令，将对象打包、上传
 
 6、邮件相关命令
-    命令                 简要说明
+    命令                  简要说明
 git imap-send           将补丁通过IMAP发送
 git mailinfo            从邮件导出提交说明和补丁
 git mailsplit           将 mbox 或 Maildir 格式邮箱中邮件逐一提取为文件
@@ -112,7 +112,7 @@ git request-pull        创建包含提交间差异和执行PULL操作地址的�
 git send-email          发送邮件
 
 7、协议相关命令
-    命令                 简要说明
+    命令                  简要说明
 git daemon              实现Git协议
 git http-backend        实现HTTP协议的CGI程序，支持智能HTTP协议
 git instaweb            即时启动浏览器通过 gitweb 浏览当前版本库
@@ -129,7 +129,7 @@ git remote-https        由Git命令调用，提供对HTTPS协议的支持
 git remote-testgit      协议扩展示例脚本
 
 8、版本库转换和交互相关命令
-    命令                 简要说明
+    命令                  简要说明
 git archimport          导入Arch版本库到Git
 git bundle              提交打包和解包，以便在不同版本库间传递
 git cvsexportcommit     将Git的一个提交作为一个CVS检出
@@ -140,7 +140,7 @@ git fast-import         其他版本库迁移至Git的通用工具
 git svn                 Git 作为前端操作 Subversion
 
 9、合并相关的辅助命令
-    命令                 简要说明
+    命令                  简要说明
 git merge-base          供其他脚本调用，找到两个或多个提交最近的共同祖先
 git merge-file          针对文件的两个不同版本执行三向文件合并
 git merge-index         对index中的冲突文件调用指定的冲突解决工具
@@ -155,28 +155,36 @@ git fmt-merge-msg       供执行合并操作的脚本调用，用于创建一�
 git rerere              重用所记录的冲突解决方案
 
 10、 杂项
-    命令                 简要说明
-git bisect–helper       由 git bisect 命令调用，确认二分查找进度
+    命令                  简要说明
+git bisect–helper      由 git bisect 命令调用，确认二分查找进度
 git check-attr          显示某个文件是否设置了某个属性
 git checkout-index      从暂存区拷贝文件至工作区
 git cherry              查找没有合并到上游的提交
 git diff-files          比较暂存区和工作区，相当于 git diff –raw
 git diff-index          比较暂存区和版本库，相当于 git diff –cached –raw
 git diff-tree           比较两个树对象，相当于 git diff –raw A B
-git difftool–helper     由 git difftool 命令调用，默认要使用的差异比较工具
+git difftool–helper    由 git difftool 命令调用，默认要使用的差异比较工具
 git get-tar-commit-id   从 git archive 创建的 tar 包中提取提交ID
-git gui–askpass         命令 git gui 的获取用户口令输入界面
+git gui–askpass        命令 git gui 的获取用户口令输入界面
 git notes               提交评论管理
 git patch-id            补丁过滤行号和空白字符后生成补丁唯一ID
 git quiltimport         将Quilt补丁列表应用到当前分支
 git replace             提交替换
 git shortlog            对 git log 的汇总输出，适合于产品发布说明
 git stripspace          删除空行，供其他脚本调用
-git submodule           子模组管理
 git tar-tree            过时命令，请使用 git archive
 git var                 显示 Git 环境变量
-git web–browse          启动浏览器以查看目录或文件
+git web–browse         启动浏览器以查看目录或文件
 git whatchanged         显示提交历史及每次提交的改动
-git-mergetool–lib       包含于其他脚本中，提供合并/差异比较工具的选择和执行
+git-mergetool–lib      包含于其他脚本中，提供合并/差异比较工具的选择和执行
 git-parse-remote        包含于其他脚本中，提供操作远程版本库的函数
 git-sh-setup            包含于其他脚本中，提供 shell 编程的函数库
+
+11、子模组
+    命令                  简要说明
+git submodule           子模组管理
+git submodule add       添加子模块
+git submodule status    子模块状态
+git submodule init      初始化本地配置文件
+git submodule update    更新已注册的子模块, --remote 时，Git 默认会尝试更新所有子模块。
+git submodule sync      将子模块的远程URL配置设置同步到.gitmodules中指定的值。
